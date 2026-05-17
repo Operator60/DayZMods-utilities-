@@ -89,6 +89,19 @@ LOCALE_RU = {
     "btn_apply": "✅ Применить изменения",
     "btn_cancel": "❌ Отмена",
     "btn_save_template": "📄 Заполнить шаблоном (нули)",
+    "btn_parse_description": "📖 Заполнить из описания (CSV)",
+    
+    # === ПАРСИНГ ОПИСАНИЯ ===
+    "select_csv_for_parsing": "Выберите CSV файл с описаниями артефактов",
+    "parse_description_not_found": "Описание для артефакта '{class_name}' не найдено в CSV файле.",
+    "parse_description_no_values": "Не удалось извлечь числовые значения эффектов из описания артефакта '{class_name}'.",
+    "parse_preview_title": "Найдены следующие значения для артефакта '{class_name}':",
+    "parse_preview_question": "Заполнить пустые поля этими значениями?",
+    "parse_preview_title_short": "Предпросмотр значений из описания",
+    "parse_description_success": "Успешно заполнено эффектов: {count}",
+    "error_parsing_title": "Ошибка при парсинге описания",
+    "info_title": "Информация",
+    "success_title": "Успешно",
     
     # === МАССОВАЯ НАСТРОЙКА ===
     "bulk_title": "🎲 Массовая настройка эффектов артефактов",
