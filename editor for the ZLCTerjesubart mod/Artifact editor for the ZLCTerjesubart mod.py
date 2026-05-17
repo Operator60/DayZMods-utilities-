@@ -4,6 +4,7 @@ import json
 import os
 import copy
 import random
+import re
 
 # Импортируем систему локализации
 from localization import _, localizer, LOCALE_RU
@@ -65,6 +66,38 @@ EFFECT_DESCRIPTIONS = {
     "brokenLeg": _("effect_brokenLeg"),
     "jumpHeight": _("effect_jumpHeight"),
     "meleeDamage": _("effect_meleeDamage"),
+}
+
+# Словарь соответствия ключевых слов в описании эффектам
+EFFECT_KEYWORDS = {
+    "health": ["здоров", "health", "хп", "hp", "жизн"],
+    "blood": ["кров", "blood", "гемоглобин"],
+    "shock": ["шок", "shock", "болев", "боль"],
+    "water": ["вод", "water", "жажд", "влажн"],
+    "energy": ["энерг", "energy", "калори"],
+    "stamina": ["стамина", "stamina", "вынослив", "устал"],
+    "sleeping": ["сон", "sleep", "бодр", "устал"],
+    "mind": ["рассуд", "mind", "психик", "ментальн", "санити"],
+    "pain": ["бол", "pain", "болеутоля"],
+    "contusion": ["контус", "contusion", "потрясен", "мозг"],
+    "hematomas": ["гематом", "синяк", "hematoma"],
+    "lightBleeding": ["легк кровотеч", "light bleed", "слаб кровоточ"],
+    "heavyBleeding": ["сильн кровотеч", "heavy bleed", "обильн кровоточ"],
+    "bulletWounds": ["пулев", "bullet", "ранен", "wound"],
+    "viscera": ["орган", "viscera", "внутренн"],
+    "sepsis": ["сепсис", "sepsis", "заражен кров", "инфекц"],
+    "zombieVirus": ["зомби вирус", "zombie virus", "вирус зомби", "инфекция зомби"],
+    "influenza": ["грипп", "influenza", "простуд", "болезнь"],
+    "poison": ["отрав", "poison", "токсин"],
+    "biohazard": ["биоугроз", "biohazard", "биологическ"],
+    "rabies": ["бешенств", "rabies"],
+    "overdose": ["передоз", "overdose", "наркотик"],
+    "immunity": ["иммун", "immunity", "сопротивлен"],
+    "radiation": ["радиаци", "radiation", "радиоактив", "облучен"],
+    "temperature": ["температур", "temperature", "тепл", "холод"],
+    "brokenLeg": ["сломан ног", "broken leg", "перелом", "травм ног"],
+    "jumpHeight": ["прыжок", "jump", "высот прыж"],
+    "meleeDamage": ["урон ближн", "melee damage", "урон рукопашн", "атак"],
 }
 
 class ArtifactManagerApp:
@@ -401,6 +434,147 @@ class ArtifactManagerApp:
         btn_frame.pack(fill="x", padx=15, pady=15)
         ttk.Button(btn_frame, text=_("btn_apply"), command=apply_changes).pack(side="right", padx=5)
         ttk.Button(btn_frame, text=_("btn_cancel"), command=win.destroy).pack(side="right", padx=5)
+        
+        # Кнопка заполнения из описания
+        desc_btn_frame = ttk.Frame(win)
+        desc_btn_frame.pack(fill="x", padx=15, pady=(0, 10))
+        ttk.Button(desc_btn_frame, text=_("btn_parse_description"), 
+                   command=lambda: self.parse_description_to_effects(editor_data.get("className", ""), eff_entries)).pack(side="left", padx=5)
+
+    def parse_description_to_effects(self, class_name, effect_entries):
+        """
+        Парсит описание артефакта из CSV и заполняет эффекты
+        """
+        csv_path = os.path.join(os.path.dirname(self.file_path) if self.file_path else os.getcwd(), "Арты (Шаблон) .csv")
+        
+        # Если файл не найден в той же директории, пробуем текущую рабочую
+        if not os.path.exists(csv_path):
+            csv_path = "Арты (Шаблон) .csv"
+        
+        if not os.path.exists(csv_path):
+            # Пытаемся найти CSV через диалог
+            csv_path = filedialog.askopenfilename(
+                title=_("select_csv_for_parsing"),
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+            )
+            if not csv_path:
+                return
+        
+        try:
+            with open(csv_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            if len(lines) < 2:
+                raise ValueError(_("csv_error_no_header"))
+            
+            # Находим описание для текущего артефакта
+            header = lines[0].split(",")
+            cls_idx = next((i for i, h in enumerate(header) if "класснейм" in h.lower() or "classname" in h.lower()), -1)
+            desc_idx = next((i for i, h in enumerate(header) if "опиш" in h.lower() or "description" in h.lower()), -1)
+            
+            if cls_idx == -1:
+                raise ValueError(_("csv_error_no_classname"))
+            
+            description = None
+            for line in lines[1:]:
+                parts = line.split(",")
+                if len(parts) <= cls_idx:
+                    continue
+                current_cls = parts[cls_idx].strip('" \t\r\n')
+                if current_cls == class_name:
+                    if desc_idx >= 0 and desc_idx < len(parts):
+                        description = parts[desc_idx].strip('" \t\r\n')
+                    break
+            
+            if not description:
+                messagebox.showinfo(
+                    _("info_title"), 
+                    _("parse_description_not_found").format(class_name=class_name)
+                )
+                return
+            
+            # Парсим описание и находим значения эффектов
+            parsed_effects = self._extract_effects_from_text(description)
+            
+            if not parsed_effects:
+                messagebox.showinfo(
+                    _("info_title"),
+                    _("parse_description_no_values").format(class_name=class_name)
+                )
+                return
+            
+            # Показываем предпросмотр
+            preview_text = _("parse_preview_title").format(class_name=class_name) + "\n\n"
+            for eff_key, value in parsed_effects.items():
+                preview_text += f"{eff_key}: {value}\n"
+            
+            preview_text += "\n" + _("parse_preview_question")
+            
+            if messagebox.askyesno(_("parse_preview_title_short"), preview_text):
+                # Применяем значения к полям ввода
+                for eff_type in ["positiveEffects", "negativeEffects"]:
+                    if eff_type in effect_entries:
+                        for eff_key, entry_widget in effect_entries[eff_type].items():
+                            if eff_key in parsed_effects:
+                                # Заполняем только если поле пустое или значение 0
+                                current_val = entry_widget.get().strip()
+                                if not current_val or current_val == "0" or current_val == "0.0":
+                                    entry_widget.delete(0, tk.END)
+                                    entry_widget.insert(0, str(parsed_effects[eff_key]))
+            
+            messagebox.showinfo(
+                _("success_title"),
+                _("parse_description_success").format(count=len(parsed_effects))
+            )
+            
+        except Exception as e:
+            messagebox.showerror(_("error_parsing_title"), f"{_('error_parsing_title')}:\n{str(e)}")
+    
+    def _extract_effects_from_text(self, text):
+        """
+        Извлекает числовые значения эффектов из текста описания
+        Возвращает словарь {effect_key: value}
+        """
+        result = {}
+        text_lower = text.lower()
+        
+        # Паттерн для поиска чисел (включая отрицательные и дробные)
+        number_pattern = r'[-+]?(?:\d+\.?\d*|\d*\.\d+)'
+        
+        for effect_key, keywords in EFFECT_KEYWORDS.items():
+            # Ищем ключевые слова в тексте
+            found_keyword = False
+            keyword_pos = -1
+            
+            for keyword in keywords:
+                pos = text_lower.find(keyword.lower())
+                if pos != -1:
+                    found_keyword = True
+                    keyword_pos = pos
+                    break
+            
+            if not found_keyword:
+                continue
+            
+            # Ищем число после ключевого слова (в пределах 50 символов)
+            search_range = text[keyword_pos:min(keyword_pos + 50, len(text))]
+            matches = re.findall(number_pattern, search_range)
+            
+            if matches:
+                # Берём первое найденное число
+                try:
+                    value = float(matches[0])
+                    # Определяем знак эффекта по контексту
+                    if any(word in text_lower[:keyword_pos] for word in ["увелич", "повыш", "улучш", "восстан", "леч", "бонус", "plus", "+"]):
+                        value = abs(value)
+                    elif any(word in text_lower[:keyword_pos] for word in ["уменьш", "сниз", "ухудш", "поврежд", "минус", "-"]):
+                        value = -abs(value)
+                    
+                    result[effect_key] = round(value, 2)
+                except ValueError:
+                    pass
+        
+        return result
 
     def fill_template(self, text_widget, key):
         text_widget.delete("1.0", tk.END)
