@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, scrolledtext
+from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
@@ -61,6 +61,16 @@ class ArtifactManagerApp:
         ttk.Button(btn_frame, text="🔄 Обновить список", command=self.refresh_tree).pack(side="left", padx=2)
         ttk.Button(btn_frame, text="📄 Импорт из CSV (классы)", command=self.import_csv).pack(side="left", padx=2)
 
+        # Поиск по класснейму
+        search_frame = ttk.Frame(self.root)
+        search_frame.pack(fill="x", padx=10, pady=5)
+        ttk.Label(search_frame, text="🔍 Поиск:").pack(side="left", padx=(0, 5))
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *args: self.filter_tree(self.search_var.get()))
+        search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=40)
+        search_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(search_frame, text="✕ Очистить", command=lambda: self.search_var.set("")).pack(side="left", padx=5)
+
         # Список артефактов
         tree_frame = ttk.Frame(self.root)
         tree_frame.pack(fill="both", expand=True, padx=10, pady=5)
@@ -78,6 +88,32 @@ class ArtifactManagerApp:
         
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+        
+        # Хранилище для фильтрации
+        self._all_artifacts_data = []
+
+    def filter_tree(self, search_term):
+        """Фильтрация списка артефактов по класснейму"""
+        search_term = search_term.lower().strip()
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        if not search_term:
+            # Показываем все
+            for i, art in enumerate(self.main_data["artifacts"]):
+                pos_cnt = sum(1 for v in art.get("positiveEffects", {}).values() if v != 0)
+                neg_cnt = sum(1 for v in art.get("negativeEffects", {}).values() if v != 0)
+                self.tree.insert("", "end", iid=str(i), values=(i, art.get("className","?"), art.get("workInHands","?"),
+                         art.get("workInInventory","?"), art.get("areaRadius","?"), pos_cnt, neg_cnt))
+        else:
+            # Фильтруем по класснейму
+            for i, art in enumerate(self.main_data["artifacts"]):
+                class_name = art.get("className", "").lower()
+                if search_term in class_name:
+                    pos_cnt = sum(1 for v in art.get("positiveEffects", {}).values() if v != 0)
+                    neg_cnt = sum(1 for v in art.get("negativeEffects", {}).values() if v != 0)
+                    self.tree.insert("", "end", iid=str(i), values=(i, art.get("className","?"), art.get("workInHands","?"),
+                             art.get("workInInventory","?"), art.get("areaRadius","?"), pos_cnt, neg_cnt))
 
     def load_json(self):
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
@@ -135,77 +171,135 @@ class ArtifactManagerApp:
         if index is None:
             editor_data = copy.deepcopy(DEFAULT_ARTIFACT)
             self.current_index = len(self.main_data["artifacts"])
+            self._edit_mode = "new"
         else:
             editor_data = copy.deepcopy(self.main_data["artifacts"][index])
             self.current_index = index
+            self._edit_mode = "edit"
             
         win = tk.Toplevel(self.root)
         win.title(f"Редактор артефакта {'(Новый)' if index is None else '#'+str(index+1)}")
-        win.geometry("850x600")
+        win.geometry("950x700")
         
         # Основные поля
-        ttk.Label(win, text="Основные параметры:").pack(anchor="w", padx=10, pady=(10,0))
+        ttk.Label(win, text="Основные параметры:", font=("Arial", 11, "bold")).pack(anchor="w", padx=15, pady=(15,5))
         fields = [
-            ("className", "Класснейм (ключ)"), ("workInHands", "Работает в руке (1/0)"),
-            ("workInInventory", "Работает в инвентаре (1/0)"), ("workInArea", "Работает в области (1/0)"),
-            ("areaRadius", "Радиус аномалии (м)"), ("areaPowerMode", "Мощность зоны")
+            ("className", "Класснейм (ключ)", False),
+            ("workInHands", "Работает в руке (1/0)", True),
+            ("workInInventory", "Работает в инвентаре (1/0)", True),
+            ("workInArea", "Работает в области (1/0)", True),
+            ("areaRadius", "Радиус аномалии (м)", False),
+            ("areaPowerMode", "Мощность зоны", False)
         ]
         forms = {}
-        for key, lbl in fields:
+        for key, lbl, is_binary in fields:
             frm = ttk.Frame(win)
-            frm.pack(fill="x", padx=15)
-            ttk.Label(frm, text=f"{lbl}: ", width=30, anchor="e").pack(side="left")
-            ent = ttk.Entry(frm)
+            frm.pack(fill="x", padx=20, pady=2)
+            ttk.Label(frm, text=f"{lbl}: ", width=32, anchor="e").pack(side="left")
+            ent = ttk.Entry(frm, width=15)
             ent.insert(0, str(editor_data.get(key)))
-            ent.pack(side="left", fill="x", expand=True)
+            ent.pack(side="left", padx=5)
             forms[key] = ent
             
-        # Блоки эффектов
-        ttk.Label(win, text="Блоки эффектов (JSON формат). Используйте кнопки ниже для очистки/проверки.").pack(anchor="w", padx=10, pady=(15,0))
+        # Вкладки для эффектов
+        notebook = ttk.Notebook(win)
+        notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
-        eff_frames = [("positiveEffects", "Позитивные эффекты (+)", "green"), 
-                      ("negativeEffects", "Негативные эффекты (-)", "red")]
         eff_entries = {}
-        for key, title, color in eff_frames:
-            frm = ttk.LabelFrame(win, text=title)
-            frm.pack(fill="both", expand=True, padx=10, pady=5)
+        for eff_type, title, color in [
+            ("positiveEffects", "✅ Позитивные эффекты", "green"),
+            ("negativeEffects", "❌ Негативные эффекты", "red")
+        ]:
+            frame = ttk.Frame(notebook)
+            notebook.add(frame, text=title)
             
-            txt = scrolledtext.ScrolledText(frm, height=8, font=("Consolas", 9))
-            txt.pack(fill="both", expand=True, padx=5, pady=5)
-            # Подсветка синтаксиса (упрощённая)
-            txt.tag_configure("key", foreground="darkblue")
-            txt.tag_configure("val", foreground="purple")
-            txt.insert("1.0", json.dumps(editor_data.get(key), indent=2, ensure_ascii=False))
-            eff_entries[key] = txt
+            # Создаём canvas с прокруткой для таблицы эффектов
+            canvas = tk.Canvas(frame, highlightthickness=0)
+            scrollbar_y = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+            inner_frame = ttk.Frame(canvas)
             
-            btns = ttk.Frame(frm)
-            btns.pack(fill="x", padx=5, pady=(0,5))
-            ttk.Button(btns, text="Очистить", command=lambda t=txt: t.delete("1.0", tk.END)).pack(side="left", padx=2)
-            ttk.Button(btns, text="Показать шаблон", command=lambda t=txt: self.fill_template(t, key)).pack(side="left", padx=2)
-            ttk.Button(btns, text="Проверить JSON", command=lambda t=txt: self.validate_json(t)).pack(side="left", padx=2)
+            inner_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar_y.set)
             
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar_y.pack(side="right", fill="y")
+            
+            # Заголовки таблицы
+            ttk.Label(inner_frame, text="Эффект", font=("Arial", 10, "bold"), width=20, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+            ttk.Label(inner_frame, text="Значение", font=("Arial", 10, "bold"), width=15, anchor="center").grid(row=0, column=1, padx=5, pady=5)
+            ttk.Label(inner_frame, text="Описание", font=("Arial", 10, "bold"), width=40, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+            
+            effect_entries = {}
+            effect_descriptions = {
+                "health": "Здоровье", "blood": "Кровь", "shock": "Шок",
+                "water": "Вода", "energy": "Энергия", "stamina": "Выносливость",
+                "sleeping": "Сон", "mind": "Рассудок", "pain": "Боль",
+                "contusion": "Контузия", "hematomas": "Гематомы",
+                "lightBleeding": "Лёгкое кровотечение", "heavyBleeding": "Сильное кровотечение",
+                "bulletWounds": "Пулевые ранения", "viscera": "Внутренности",
+                "sepsis": "Сепсис", "zombieVirus": "Вирус зомби", "influenza": "Грипп",
+                "poison": "Отравление", "biohazard": "Биоугроза", "rabies": "Бешенство",
+                "overdose": "Передозировка", "immunity": "Иммунитет",
+                "radiation": "Радиация", "temperature": "Температура тела",
+                "brokenLeg": "Сломанная нога", "jumpHeight": "Высота прыжка",
+                "meleeDamage": "Урон ближнего боя"
+            }
+            
+            for row, effect_key in enumerate(DEFAULT_EFFECT_KEYS, start=1):
+                ttk.Label(inner_frame, text=effect_key, width=20, anchor="w").grid(row=row, column=0, padx=5, pady=2, sticky="w")
+                entry = ttk.Entry(inner_frame, width=15)
+                val = editor_data.get(eff_type, {}).get(effect_key, 0.0)
+                entry.insert(0, str(val))
+                entry.grid(row=row, column=1, padx=5, pady=2)
+                effect_entries[effect_key] = entry
+                
+                desc = effect_descriptions.get(effect_key, "")
+                ttk.Label(inner_frame, text=desc, width=40, anchor="w", foreground="gray").grid(row=row, column=2, padx=5, pady=2, sticky="w")
+            
+            eff_entries[eff_type] = effect_entries
+        
         def apply_changes():
             try:
                 new_data = {}
                 for key, wgt in forms.items():
                     val = wgt.get().strip()
+                    if not val:
+                        raise ValueError(f"Поле '{key}' не может быть пустым")
                     if key.startswith("work"):
-                        new_data[key] = 1 if val == "1" else 0
+                        if val not in ("0", "1"):
+                            raise ValueError(f"Поле '{key}' должно быть 0 или 1")
+                        new_data[key] = int(val)
                     elif key in ("areaRadius", "areaPowerMode"):
-                        new_data[key] = float(val) if val else 0
+                        new_data[key] = float(val)
                     else:
                         new_data[key] = val
                         
-                for key, widget in eff_entries.items():
-                    content = widget.get("1.0", tk.END).strip()
-                    if not content:
-                        new_data[key] = make_template_dict(0.0)
-                    else:
-                        parsed = json.loads(content)
-                        if not isinstance(parsed, dict):
-                            raise ValueError("Объект должен быть словарём")
-                        new_data[key] = parsed
-                        
+                # Собираем эффекты из таблицы
+                for eff_type in ("positiveEffects", "negativeEffects"):
+                    effects_dict = {}
+                    for effect_key, entry_widget in eff_entries[eff_type].items():
+                        val_str = entry_widget.get().strip()
+                        if not val_str:
+                            raise ValueError(f"Поле эффекта '{effect_key}' в разделе '{eff_type}' не может быть пустым. Введите 0 если эффект не нужен.")
+                        try:
+                            val = float(val_str)
+                        except ValueError:
+                            raise ValueError(f"Неверное числовое значение для эффекта '{effect_key}': {val_str}")
+                        effects_dict[effect_key] = val
+                    new_data[eff_type] = effects_dict
+                
+                # Добавляем effects как объединение positive и negative (для совместимости)
+                combined_effects = make_template_dict(0.0)
+                for k in DEFAULT_EFFECT_KEYS:
+                    pos_val = new_data["positiveEffects"].get(k, 0.0)
+                    neg_val = new_data["negativeEffects"].get(k, 0.0)
+                    combined_effects[k] = pos_val + neg_val
+                new_data["effects"] = combined_effects
+                
                 # Мерж с шаблоном на случай пропущенных ключей
                 base = copy.deepcopy(DEFAULT_ARTIFACT)
                 base.update(new_data)
@@ -213,19 +307,22 @@ class ArtifactManagerApp:
                 for eff_key in ("effects", "positiveEffects", "negativeEffects"):
                     self._normalize_effect_keys(base[eff_key])
                     
-                self.main_data["artifacts"].insert(self.current_index, base)
-                if index is not None and index < len(self.main_data["artifacts"])-1:
-                    # Если это замена существующего (логика упрощена: сначала удаляем старый если редактируем)
-                    pass
+                if self._edit_mode == "new":
+                    self.main_data["artifacts"].append(base)
+                else:
+                    self.main_data["artifacts"][self.current_index] = base
                     
                 self.refresh_tree()
                 win.destroy()
                 self.status_var.set("Изменения применены в память. Нажмите 💾 Сохранить.")
                 
             except Exception as e:
-                messagebox.showerror("Ошибка валидации", f"Некорректный JSON или данные:\n{str(e)}")
+                messagebox.showerror("Ошибка валидации", f"Проверьте введённые данные:\n{str(e)}")
 
-        ttk.Button(win, text="✅ Применить", command=apply_changes, style="Accent.TButton").pack(pady=10)
+        btn_frame = ttk.Frame(win)
+        btn_frame.pack(fill="x", padx=15, pady=15)
+        ttk.Button(btn_frame, text="✅ Применить", command=apply_changes).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text="❌ Отмена", command=win.destroy).pack(side="right", padx=5)
 
     def fill_template(self, text_widget, key):
         text_widget.delete("1.0", tk.END)
