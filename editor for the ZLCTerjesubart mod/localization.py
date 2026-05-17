@@ -148,6 +148,24 @@ LOCALE_RU = {
     # === CSV ИМПОРТ ===
     "csv_error_no_header": "CSV файл пуст или не содержит заголовков",
     "csv_error_no_classname": "Не найден столбец с класснеймом (class_name или classname)",
+    "csv_error_no_columns": "CSV файл должен содержать как минимум 2 колонки: класснейм и описание",
+    "csv_error_empty": "CSV файл не содержит данных",
+    "csv_select_title": "Выберите CSV файл с описаниями артефактов",
+    "error_classname_empty": "Поле класснейма пусто. Введите название артефакта.",
+    "warning_csv_not_found": "Артефакт '{classname}' не найден в CSV файле.",
+    "info_no_effects_found": "В описании не найдены числовые значения эффектов.",
+    "csv_found_effects": "Найдено эффектов: {count}",
+    "csv_apply_confirmation": "Применить найденные значения только к пустым полям?",
+    "csv_preview_title": "📋 Предпросмотр найденных эффектов",
+    "success_csv_fill": "Заполнено эффектов: {count}",
+    "info_csv_no_empty": "Все поля уже заполнены. Нечего обновлять.",
+    "error_csv_parse": "Ошибка при обработке CSV файла",
+    "bulk_opt_csv_fill": "📄 Заполнить эффекты из CSV описаний (вместо рандома)",
+    "success_bulk_csv_title": "✅ Массовое заполнение из CSV завершено!",
+    "success_bulk_csv_message": "Изменено эффектов: {modified}\\nАртефактов обработано: {artifacts}\\n\\nНе забудьте сохранить файл! 💾",
+    
+    # === КНОПКА ЗАПОЛНЕНИЯ ИЗ CSV ===
+    "btn_fill_from_csv": "📖 Заполнить из описания (CSV)",
     
     # === РАЗНОЕ ===
     "unknown_artifact": "Неизвестный артефакт",
