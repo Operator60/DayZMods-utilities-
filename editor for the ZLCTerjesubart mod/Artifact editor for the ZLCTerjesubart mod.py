@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
+import random
 
 # ──────────────────────────────────────────────────────────────
 # ШАБЛОНЫ И КОНСТАНТЫ
@@ -60,6 +61,8 @@ class ArtifactManagerApp:
         ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10)
         ttk.Button(btn_frame, text="🔄 Обновить список", command=self.refresh_tree).pack(side="left", padx=2)
         ttk.Button(btn_frame, text="📄 Импорт из CSV (классы)", command=self.import_csv).pack(side="left", padx=2)
+        ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10)
+        ttk.Button(btn_frame, text="🎲 Массовая настройка", command=self.open_bulk_editor).pack(side="left", padx=2)
 
         # Поиск по класснейму
         search_frame = ttk.Frame(self.root)
@@ -403,6 +406,217 @@ class ArtifactManagerApp:
             
         except Exception as e:
             messagebox.showerror("Ошибка импорта", str(e))
+
+    def open_bulk_editor(self):
+        """Окно массовой настройки эффектов для выбранных артефактов"""
+        if not self.main_data["artifacts"]:
+            messagebox.showinfo("Внимание", "Сначала загрузите файл с артефактами.")
+            return
+            
+        win = tk.Toplevel(self.root)
+        win.title("🎲 Массовая настройка эффектов")
+        win.geometry("1000x750")
+        
+        # Инструкция
+        ttk.Label(win, text="Выберите артефакты, эффекты и диапазоны значений для случайной генерации", 
+                  font=("Arial", 11)).pack(pady=10)
+        
+        # === БЛОК 1: Выбор артефактов ===
+        art_frame = ttk.LabelFrame(win, text="1️⃣ Выберите артефакты", padding=10)
+        art_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Список с чекбоксами для артефактов
+        art_canvas = tk.Canvas(art_frame, height=150)
+        art_scrollbar = ttk.Scrollbar(art_frame, orient="vertical", command=art_canvas.yview)
+        art_inner = ttk.Frame(art_canvas)
+        
+        art_inner.bind("<Configure>", lambda e: art_canvas.configure(scrollregion=art_canvas.bbox("all")))
+        art_canvas.create_window((0, 0), window=art_inner, anchor="nw")
+        art_canvas.configure(yscrollcommand=art_scrollbar.set)
+        
+        art_canvas.pack(side="left", fill="both", expand=True)
+        art_scrollbar.pack(side="right", fill="y")
+        
+        art_checkboxes = {}
+        for i, art in enumerate(self.main_data["artifacts"]):
+            var = tk.BooleanVar()
+            cb = ttk.Checkbutton(art_inner, text=f"{art.get('className', 'Unknown')} (#{i+1})", variable=var)
+            cb.grid(row=i//2, column=i%2, sticky="w", padx=5, pady=2)
+            art_checkboxes[i] = var
+        
+        # Кнопки выбора всех/снятия всех
+        art_btn_frame = ttk.Frame(art_frame)
+        art_btn_frame.pack(fill="x", pady=(5,0))
+        ttk.Button(art_btn_frame, text="✅ Выбрать все", 
+                   command=lambda: [v.set(True) for v in art_checkboxes.values()]).pack(side="left", padx=5)
+        ttk.Button(art_btn_frame, text="❌ Снять все", 
+                   command=lambda: [v.set(False) for v in art_checkboxes.values()]).pack(side="left", padx=5)
+        
+        # === БЛОК 2: Выбор эффектов ===
+        eff_frame = ttk.LabelFrame(win, text="2️⃣ Выберите эффекты для настройки", padding=10)
+        eff_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Вкладки для позитивных/негативных
+        eff_notebook = ttk.Notebook(eff_frame)
+        eff_notebook.pack(fill="both", expand=True)
+        
+        effect_checkboxes = {"positiveEffects": {}, "negativeEffects": {}}
+        effect_descriptions = {
+            "health": "Здоровье", "blood": "Кровь", "shock": "Шок",
+            "water": "Вода", "energy": "Энергия", "stamina": "Выносливость",
+            "sleeping": "Сон", "mind": "Рассудок", "pain": "Боль",
+            "contusion": "Контузия", "hematomas": "Гематомы",
+            "lightBleeding": "Лёгкое кровотечение", "heavyBleeding": "Сильное кровотечение",
+            "bulletWounds": "Пулевые ранения", "viscera": "Внутренности",
+            "sepsis": "Сепсис", "zombieVirus": "Вирус зомби", "influenza": "Грипп",
+            "poison": "Отравление", "biohazard": "Биоугроза", "rabies": "Бешенство",
+            "overdose": "Передозировка", "immunity": "Иммунитет",
+            "radiation": "Радиация", "temperature": "Температура тела",
+            "brokenLeg": "Сломанная нога", "jumpHeight": "Высота прыжка",
+            "meleeDamage": "Урон ближнего боя"
+        }
+        
+        for eff_type, title in [("positiveEffects", "✅ Позитивные эффекты"), ("negativeEffects", "❌ Негативные эффекты")]:
+            frame = ttk.Frame(eff_notebook)
+            eff_notebook.add(frame, text=title)
+            
+            # Canvas с прокруткой
+            canvas = tk.Canvas(frame, height=200)
+            scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+            inner = ttk.Frame(canvas)
+            
+            inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+            canvas.create_window((0, 0), window=inner, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Чекбоксы эффектов в 2 колонки
+            for row, effect_key in enumerate(DEFAULT_EFFECT_KEYS):
+                var = tk.BooleanVar()
+                desc = effect_descriptions.get(effect_key, "")
+                cb = ttk.Checkbutton(inner, text=f"{effect_key} ({desc})", variable=var)
+                cb.grid(row=row//2, column=row%2, sticky="w", padx=5, pady=2)
+                effect_checkboxes[eff_type][effect_key] = var
+            
+            # Кнопки выбрать все/снять все
+            btn_f = ttk.Frame(frame)
+            btn_f.pack(fill="x", pady=(5,0))
+            ttk.Button(btn_f, text="✅ Все", 
+                       command=lambda t=eff_type: [v.set(True) for v in effect_checkboxes[t].values()]).pack(side="left", padx=5)
+            ttk.Button(btn_f, text="❌ Никакие", 
+                       command=lambda t=eff_type: [v.set(False) for v in effect_checkboxes[t].values()]).pack(side="left", padx=5)
+        
+        # === БЛОК 3: Диапазоны значений ===
+        range_frame = ttk.LabelFrame(win, text="3️⃣ Диапазон значений (мин - макс)", padding=10)
+        range_frame.pack(fill="x", padx=10, pady=5)
+        
+        range_entries = {}
+        for eff_type in ["positiveEffects", "negativeEffects"]:
+            frm = ttk.Frame(range_frame)
+            frm.pack(fill="x", pady=2)
+            ttk.Label(frm, text=f"{eff_type.replace('Effects', ' эффекты')}: ", width=25, anchor="e").pack(side="left")
+            
+            min_entry = ttk.Entry(frm, width=10)
+            min_entry.insert(0, "-10.0")
+            min_entry.pack(side="left", padx=5)
+            
+            ttk.Label(frm, text="до").pack(side="left", padx=5)
+            
+            max_entry = ttk.Entry(frm, width=10)
+            max_entry.insert(0, "10.0")
+            max_entry.pack(side="left", padx=5)
+            
+            range_entries[eff_type] = {"min": min_entry, "max": max_entry}
+        
+        # === БЛОК 4: Дополнительные опции ===
+        opt_frame = ttk.LabelFrame(win, text="🔧 Дополнительные опции", padding=10)
+        opt_frame.pack(fill="x", padx=10, pady=5)
+        
+        skip_zero_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opt_frame, text="Не устанавливать нулевые значения (пропускать, если выпало 0)", 
+                        variable=skip_zero_var).pack(anchor="w")
+        
+        overwrite_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opt_frame, text="Перезаписать существующие эффекты (иначе только пустые)", 
+                        variable=overwrite_var).pack(anchor="w")
+        
+        # === КНОПКИ ДЕЙСТВИЯ ===
+        action_frame = ttk.Frame(win)
+        action_frame.pack(fill="x", padx=10, pady=15)
+        
+        def apply_bulk():
+            # Сбор выбранных артефактов
+            selected_indices = [i for i, var in art_checkboxes.items() if var.get()]
+            if not selected_indices:
+                messagebox.showwarning("Внимание", "Выберите хотя бы один артефакт!")
+                return
+            
+            # Сбор выбранных эффектов
+            selected_effects = {"positiveEffects": [], "negativeEffects": []}
+            for eff_type in ["positiveEffects", "negativeEffects"]:
+                for eff_key, var in effect_checkboxes[eff_type].items():
+                    if var.get():
+                        selected_effects[eff_type].append(eff_key)
+            
+            if not any(selected_effects.values()):
+                messagebox.showwarning("Внимание", "Выберите хотя бы один эффект!")
+                return
+            
+            # Парсинг диапазонов
+            try:
+                ranges = {}
+                for eff_type in ["positiveEffects", "negativeEffects"]:
+                    min_val = float(range_entries[eff_type]["min"].get().strip())
+                    max_val = float(range_entries[eff_type]["max"].get().strip())
+                    if min_val > max_val:
+                        raise ValueError(f"Минимум не может быть больше максимума для {eff_type}")
+                    ranges[eff_type] = (min_val, max_val)
+            except ValueError as e:
+                messagebox.showerror("Ошибка", f"Неверный диапазон значений: {str(e)}")
+                return
+            
+            # Применение изменений
+            modified_count = 0
+            for idx in selected_indices:
+                art = self.main_data["artifacts"][idx]
+                
+                for eff_type in ["positiveEffects", "negativeEffects"]:
+                    if eff_type not in art:
+                        art[eff_type] = make_template_dict(0.0)
+                    
+                    for eff_key in selected_effects[eff_type]:
+                        # Проверка: перезаписывать или только пустые
+                        current_val = art[eff_type].get(eff_key, 0.0)
+                        if not overwrite_var.get() and current_val != 0.0:
+                            continue
+                        
+                        # Генерация случайного значения
+                        min_v, max_v = ranges[eff_type]
+                        random_val = round(random.uniform(min_v, max_v), 2)
+                        
+                        # Пропуск нуля если опция включена
+                        if skip_zero_var.get() and random_val == 0.0:
+                            continue
+                        
+                        art[eff_type][eff_key] = random_val
+                        modified_count += 1
+                
+                # Обновляем combined effects
+                combined_effects = make_template_dict(0.0)
+                for k in DEFAULT_EFFECT_KEYS:
+                    pos_val = art.get("positiveEffects", {}).get(k, 0.0)
+                    neg_val = art.get("negativeEffects", {}).get(k, 0.0)
+                    combined_effects[k] = pos_val + neg_val
+                art["effects"] = combined_effects
+            
+            self.refresh_tree()
+            messagebox.showinfo("Готово", f"Изменено эффектов: {modified_count}\nАртефактов затронуто: {len(selected_indices)}\n\nНе забудьте сохранить файл! 💾")
+            win.destroy()
+        
+        ttk.Button(action_frame, text="🎲 Применить случайные значения", command=apply_bulk).pack(side="right", padx=5)
+        ttk.Button(action_frame, text="❌ Отмена", command=win.destroy).pack(side="right", padx=5)
 
 if __name__ == "__main__":
     root = tk.Tk()
