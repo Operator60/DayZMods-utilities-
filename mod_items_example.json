@@ -1,0 +1,65 @@
+[
+  {
+    "class_name": "ZLC_Artifact_Fire",
+    "category": "misc",
+    "count_min": 1,
+    "count_max": 1,
+    "lifetime": 3888000,
+    "usage": "0.05",
+    "chance": "0.30"
+  },
+  {
+    "class_name": "ZLC_Artifact_Water",
+    "category": "misc",
+    "count_min": 1,
+    "count_max": 1,
+    "lifetime": 3888000,
+    "usage": "0.05",
+    "chance": "0.30"
+  },
+  {
+    "class_name": "ZLC_Artifact_Earth",
+    "category": "misc",
+    "count_min": 1,
+    "count_max": 1,
+    "lifetime": 3888000,
+    "usage": "0.05",
+    "chance": "0.30"
+  },
+  {
+    "class_name": "ZLC_Artifact_Air",
+    "category": "misc",
+    "count_min": 1,
+    "count_max": 1,
+    "lifetime": 3888000,
+    "usage": "0.05",
+    "chance": "0.30"
+  },
+  {
+    "class_name": "ZLC_Artifact_Lightning",
+    "category": "misc",
+    "count_min": 1,
+    "count_max": 1,
+    "lifetime": 3888000,
+    "usage": "0.02",
+    "chance": "0.15"
+  },
+  {
+    "class_name": "ZLC_Detector",
+    "category": "gear",
+    "count_min": 1,
+    "count_max": 1,
+    "lifetime": 3888000,
+    "usage": "0.10",
+    "chance": "0.40"
+  },
+  {
+    "class_name": "ZLC_Container_Small",
+    "category": "gear",
+    "count_min": 1,
+    "count_max": 3,
+    "lifetime": 3888000,
+    "usage": "0.15",
+    "chance": "0.50"
+  }
+]
