@@ -3,6 +3,9 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
+import re
+import csv
+import random
 
 # ──────────────────────────────────────────────────────────────
 # ШАБЛОНЫ И КОНСТАНТЫ
@@ -14,6 +17,53 @@ DEFAULT_EFFECT_KEYS = [
     "sepsis", "zombieVirus", "influenza", "poison", "biohazard", 
     "rabies", "overdose", "immunity", "radiation", "temperature", 
     "brokenLeg", "jumpHeight", "meleeDamage"
+]
+
+# Словарь ключевых слов для каждого эффекта (русский и английский)
+EFFECT_KEYWORDS = {
+    "health": ["здоровье", "health", "жизнь", "hp", "восстанавливает здоровье", "лечит"],
+    "blood": ["кровь", "blood", "кровопотеря", "bleed"],
+    "shock": ["шок", "shock", "болевой шок"],
+    "water": ["вода", "water", "жажда", "гидратация", "пить"],
+    "energy": ["энергия", "energy", "калории", "еда"],
+    "stamina": ["выносливость", "stamina", "усталость", "энергия бег"],
+    "sleeping": ["сон", "sleep", "усталость сон", "бессонница"],
+    "mind": ["рассудок", "mind", " sanity", "психика", "интеллект"],
+    "pain": ["боль", "pain", "обезбол", "анальгетик"],
+    "contusion": ["контузия", "contusion", "травма голова"],
+    "hematomas": ["гематома", "hematoma", "синяк", "кровоподтек"],
+    "lightBleeding": ["лёгкое кровотечение", "легкое кровотечение", "light bleeding", "минимальное кровотечение"],
+    "heavyBleeding": ["сильное кровотечение", "heavy bleeding", "обильное кровотечение", "серьезное кровотечение"],
+    "bulletWounds": ["пулевое ранение", "bullet wound", "пуля", "огнестрел"],
+    "viscera": ["внутренности", "viscera", "органы", "желудок", "кишечник"],
+    "sepsis": ["сепсис", "sepsis", "заражение кровь", "инфекция кровь"],
+    "zombieVirus": ["вирус зомби", "zombie virus", "инфекция зомби", "вирусная инфекция"],
+    "influenza": ["грипп", "influenza", "простуда", "болезнь респиратор"],
+    "poison": ["отравление", "poison", "токсин", "яд"],
+    "biohazard": ["биоугроза", "biohazard", "биологическая опасность", "радиационное заражение"],
+    "rabies": ["бешенство", "rabies", "вирус бешенства"],
+    "overdose": ["передозировка", "overdose", "наркотический"],
+    "immunity": ["иммунитет", "immunity", "сопротивляемость", "защита болезнь"],
+    "radiation": ["радиация", "radiation", "радиоактивный", "излучение"],
+    "temperature": ["температура", "temperature", "тепло", "холод", "жара"],
+    "brokenLeg": ["сломанная нога", "broken leg", "перелом ноги", "травма ноги"],
+    "jumpHeight": ["прыжок", "jump", "высота прыжка", "прыгучесть"],
+    "meleeDamage": ["урон ближнего боя", "melee damage", "ближний бой", "атака рукопашная"]
+}
+
+# Слова указывающие на положительный эффект
+POSITIVE_WORDS = [
+    "увелич", "повыш", "улучш", "восстанавлив", "леч", "защ", 
+    "усил", "boost", "increase", "restore", "heal", "protect",
+    "снижа", "уменьш", "предотвращ", "block", "reduce", "prevent",
+    "抵抗", "сопротивл"
+]
+
+# Слова указывающие на отрицательный эффект
+NEGATIVE_WORDS = [
+    "уменьш", "сниж", "ухудш", "поврежд", "травм", "разруш",
+    "decrease", "damage", "worsen", "harm", "destroy",
+    "вызыв", "причин", "опасн", "cause", "danger"
 ]
 
 def make_template_dict(val=0.0):
@@ -30,6 +80,85 @@ DEFAULT_ARTIFACT = {
     "positiveEffects": make_template_dict(0.0),
     "negativeEffects": make_template_dict(0.0)
 }
+
+def parse_description_to_effects(description_text):
+    """
+    Парсит лорное описание артефакта и извлекает значения эффектов.
+    Возвращает словарь с найденными эффектами для positiveEffects и negativeEffects.
+    """
+    if not description_text:
+        return {"positiveEffects": {}, "negativeEffects": {}}
+    
+    text_lower = description_text.lower()
+    result = {"positiveEffects": {}, "negativeEffects": {}}
+    
+    # Находим все числа в тексте (включая отрицательные и дробные)
+    numbers = re.findall(r'[-+]?\d*\.?\d+', text_lower)
+    
+    for effect_key, keywords in EFFECT_KEYWORDS.items():
+        found_value = None
+        is_positive = None
+        
+        # Ищем ключевые слова эффекта в тексте
+        for keyword in keywords:
+            if keyword in text_lower:
+                # Определяем контекст (позитивный или негативный эффект)
+                context_start = max(0, text_lower.find(keyword) - 50)
+                context_end = min(len(text_lower), text_lower.find(keyword) + 100)
+                context = text_lower[context_start:context_end]
+                
+                # Проверяем на позитивность
+                for pos_word in POSITIVE_WORDS:
+                    if pos_word in context:
+                        is_positive = True
+                        break
+                
+                # Проверяем на негативность
+                if is_positive is None:
+                    for neg_word in NEGATIVE_WORDS:
+                        if neg_word in context:
+                            is_positive = False
+                            break
+                
+                # Если не определили по контексту, пытаемся определить по смыслу эффекта
+                if is_positive is None:
+                    # По умолчанию считаем некоторые эффекты позитивными
+                    if effect_key in ["health", "blood", "energy", "stamina", "immunity", "radiation"]:
+                        # Нужно проверить контекст лучше
+                        if any(word in context for word in ["повыш", "увелич", "восстанавлив", "защ"]):
+                            is_positive = True
+                        elif any(word in context for word in ["сниж", "уменьш", "ухудш", "потер"]):
+                            is_positive = False
+                        else:
+                            # По умолчанию - позитивно если это восстановление
+                            is_positive = True
+                    else:
+                        # Для негативных эффектов по умолчанию
+                        is_positive = False
+                
+                # Пытаемся найти число рядом с ключевым словом
+                keyword_pos = text_lower.find(keyword)
+                # Ищем число в радиусе 30 символов от ключевого слова
+                search_start = max(0, keyword_pos - 30)
+                search_end = min(len(text_lower), keyword_pos + len(keyword) + 30)
+                search_area = text_lower[search_start:search_end]
+                
+                nearby_numbers = re.findall(r'[-+]?\d*\.?\d+', search_area)
+                if nearby_numbers:
+                    # Берём первое найденное число
+                    try:
+                        found_value = float(nearby_numbers[0])
+                    except ValueError:
+                        pass
+                break
+        
+        # Если нашли значение, добавляем в результат
+        if found_value is not None and is_positive is not None:
+            target_dict = result["positiveEffects"] if is_positive else result["negativeEffects"]
+            target_dict[effect_key] = found_value
+    
+    return result
+
 
 class ArtifactManagerApp:
     def __init__(self, root):
@@ -60,6 +189,8 @@ class ArtifactManagerApp:
         ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10)
         ttk.Button(btn_frame, text="🔄 Обновить список", command=self.refresh_tree).pack(side="left", padx=2)
         ttk.Button(btn_frame, text="📄 Импорт из CSV (классы)", command=self.import_csv).pack(side="left", padx=2)
+        ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10)
+        ttk.Button(btn_frame, text="🎲 Массовая настройка", command=self.open_mass_editor).pack(side="left", padx=2)
 
         # Поиск по класснейму
         search_frame = ttk.Frame(self.root)
@@ -200,6 +331,102 @@ class ArtifactManagerApp:
             ent.insert(0, str(editor_data.get(key)))
             ent.pack(side="left", padx=5)
             forms[key] = ent
+        
+        # Кнопка для заполнения из описания CSV
+        btn_frame_top = ttk.Frame(win)
+        btn_frame_top.pack(fill="x", padx=15, pady=5)
+        
+        def fill_from_csv_description():
+            """Заполняет эффекты на основе описания из CSV файла"""
+            class_name = forms["className"].get().strip()
+            if not class_name:
+                messagebox.showwarning("Предупреждение", "Сначала введите класснейм артефакта")
+                return
+            
+            # Ищем CSV файл с описаниями
+            csv_files = [
+                os.path.join(os.path.dirname(self.file_path) if self.file_path else ".", "Арты (Шаблон) .csv"),
+                os.path.join(os.getcwd(), "Арты (Шаблон) .csv"),
+            ]
+            
+            csv_path = None
+            for path in csv_files:
+                if os.path.exists(path):
+                    csv_path = path
+                    break
+            
+            if not csv_path:
+                csv_path = filedialog.askopenfilename(
+                    title="Выберите CSV файл с описаниями артефактов",
+                    filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+                )
+            
+            if not csv_path:
+                return
+            
+            try:
+                # Читаем CSV файл
+                description_text = None
+                with open(csv_path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        # Ищем по класснейму
+                        key_col = None
+                        desc_col = None
+                        for col_name in reader.fieldnames:
+                            if 'класснейм' in col_name.lower() or 'key' in col_name.lower():
+                                key_col = col_name
+                            if 'описание' in col_name.lower() or 'desc' in col_name.lower():
+                                desc_col = col_name
+                        
+                        if key_col and desc_col:
+                            if row.get(key_col, '').strip() == class_name:
+                                description_text = row.get(desc_col, '')
+                                break
+                
+                if not description_text:
+                    messagebox.showinfo("Результат", f"Описание для '{class_name}' не найдено в CSV файле")
+                    return
+                
+                # Парсим описание
+                parsed_effects = parse_description_to_effects(description_text)
+                
+                if not parsed_effects["positiveEffects"] and not parsed_effects["negativeEffects"]:
+                    messagebox.showinfo("Результат", "Не удалось извлечь эффекты из описания. Возможно, описание не содержит числовых значений или ключевых слов.")
+                    return
+                
+                # Заполняем поля эффектов
+                filled_count = 0
+                for eff_key, value in parsed_effects["positiveEffects"].items():
+                    if eff_key in eff_entries["positiveEffects"]:
+                        current_val = eff_entries["positiveEffects"][eff_key].get().strip()
+                        if current_val == "0" or current_val == "0.0" or current_val == "":
+                            eff_entries["positiveEffects"][eff_key].delete(0, tk.END)
+                            eff_entries["positiveEffects"][eff_key].insert(0, str(value))
+                            filled_count += 1
+                
+                for eff_key, value in parsed_effects["negativeEffects"].items():
+                    if eff_key in eff_entries["negativeEffects"]:
+                        current_val = eff_entries["negativeEffects"][eff_key].get().strip()
+                        if current_val == "0" or current_val == "0.0" or current_val == "":
+                            eff_entries["negativeEffects"][eff_key].delete(0, tk.END)
+                            eff_entries["negativeEffects"][eff_key].insert(0, str(value))
+                            filled_count += 1
+                
+                messagebox.showinfo(
+                    "Успех", 
+                    f"Найдено эффектов из описания:\n"
+                    f"✅ Позитивных: {len(parsed_effects['positiveEffects'])}\n"
+                    f"❌ Негативных: {len(parsed_effects['negativeEffects'])}\n"
+                    f"📝 Заполнено полей: {filled_count}\n\n"
+                    f"Текст описания:\n{description_text[:200]}..." if len(description_text) > 200 else f"\n{description_text}"
+                )
+                
+            except Exception as e:
+                messagebox.showerror("Ошибка при чтении CSV", f"Не удалось обработать CSV файл:\n{str(e)}")
+        
+        ttk.Button(btn_frame_top, text="📖 Заполнить из описания (CSV)", command=fill_from_csv_description).pack(side="left", padx=5)
+        ttk.Label(btn_frame_top, text="(заполняет только пустые поля)").pack(side="left", padx=5)
             
         # Вкладки для эффектов
         notebook = ttk.Notebook(win)
@@ -403,6 +630,254 @@ class ArtifactManagerApp:
             
         except Exception as e:
             messagebox.showerror("Ошибка импорта", str(e))
+    
+    def open_mass_editor(self):
+        """Открывает окно массовой настройки артефактов с рандомизацией и заполнением из описания"""
+        if not self.main_data["artifacts"]:
+            messagebox.showinfo("Внимание", "Сначала загрузите файл с артефактами")
+            return
+        
+        win = tk.Toplevel(self.root)
+        win.title("🎲 Массовая настройка артефактов")
+        win.geometry("1200x850")
+        win.minsize(1000, 750)
+        
+        # Блок 1: Выбор артефактов
+        art_frame = ttk.LabelFrame(win, text="1️⃣ Выберите артефакты для обработки", padding=10)
+        art_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Список с прокруткой
+        art_canvas = tk.Canvas(art_frame, height=150, highlightthickness=0)
+        art_scrollbar = ttk.Scrollbar(art_frame, orient="vertical", command=art_canvas.yview)
+        art_inner = ttk.Frame(art_canvas)
+        art_inner.bind("<Configure>", lambda e: art_canvas.configure(scrollregion=art_canvas.bbox("all")))
+        art_canvas.create_window((0, 0), window=art_inner, anchor="nw")
+        art_canvas.configure(yscrollcommand=art_scrollbar.set)
+        art_canvas.pack(side="left", fill="both", expand=True)
+        art_scrollbar.pack(side="right", fill="y")
+        
+        art_checkboxes = {}
+        for i, art in enumerate(self.main_data["artifacts"]):
+            var = tk.BooleanVar()
+            cb = ttk.Checkbutton(art_inner, text=f"{art.get('className', '???')} (#{i+1})", variable=var)
+            cb.grid(row=i//2, column=i%2, sticky="w", padx=5, pady=2)
+            art_checkboxes[i] = var
+        
+        # Кнопки выбора
+        sel_btn_frame = ttk.Frame(art_frame)
+        sel_btn_frame.grid(row=(len(art_checkboxes)//2)+1, column=0, columnspan=2, pady=5)
+        ttk.Button(sel_btn_frame, text="✅ Выбрать все", command=lambda: [v.set(True) for v in art_checkboxes.values()]).pack(side="left", padx=5)
+        ttk.Button(sel_btn_frame, text="❌ Снять все", command=lambda: [v.set(False) for v in art_checkboxes.values()]).pack(side="left", padx=5)
+        
+        # Блок 2: Режим работы
+        mode_frame = ttk.LabelFrame(win, text="2️⃣ Режим работы", padding=10)
+        mode_frame.pack(fill="x", padx=10, pady=5)
+        
+        mode_var = tk.StringVar(value="fill_from_csv")
+        ttk.Radiobutton(mode_frame, text="📖 Заполнить из описания CSV (только пустые поля)", variable=mode_var, value="fill_from_csv").pack(anchor="w", padx=10, pady=2)
+        ttk.Label(mode_frame, text="   → Автоматически извлечёт эффекты из описания в файле «Арты (Шаблон) .csv»", foreground="gray").pack(anchor="w", padx=30)
+        
+        ttk.Radiobutton(mode_frame, text="🎲 Сгенерировать случайные значения", variable=mode_var, value="random_gen").pack(anchor="w", padx=10, pady=2)
+        
+        # Блок 3: Настройка эффектов (для режима рандома)
+        rand_frame = ttk.LabelFrame(win, text="3️⃣ Параметры генерации случайных значений", padding=10)
+        rand_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Вкладки эффектов
+        rand_notebook = ttk.Notebook(rand_frame)
+        rand_notebook.pack(fill="both", expand=True)
+        
+        rand_entries = {"positiveEffects": {}, "negativeEffects": {}}
+        
+        for eff_type, title in [("positiveEffects", "✅ Позитивные эффекты"), ("negativeEffects", "❌ Негативные эффекты")]:
+            frame = ttk.Frame(rand_notebook)
+            rand_notebook.add(frame, text=title)
+            
+            canvas = tk.Canvas(frame, highlightthickness=0)
+            scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+            inner = ttk.Frame(canvas)
+            inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+            canvas.create_window((0, 0), window=inner, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Заголовки
+            ttk.Label(inner, text="Эффект", font=("Arial", 10, "bold"), width=20).grid(row=0, column=0, padx=5, pady=5)
+            ttk.Label(inner, text="Включить", font=("Arial", 10, "bold"), width=10).grid(row=0, column=1, padx=5, pady=5)
+            ttk.Label(inner, text="Мин", font=("Arial", 10, "bold"), width=10).grid(row=0, column=2, padx=5, pady=5)
+            ttk.Label(inner, text="Макс", font=("Arial", 10, "bold"), width=10).grid(row=0, column=3, padx=5, pady=5)
+            ttk.Label(inner, text="Описание", font=("Arial", 10, "bold"), width=40).grid(row=0, column=4, padx=5, pady=5)
+            
+            effect_desc = {
+                "health": "Здоровье", "blood": "Кровь", "shock": "Шок",
+                "water": "Вода", "energy": "Энергия", "stamina": "Выносливость",
+                "sleeping": "Сон", "mind": "Рассудок", "pain": "Боль",
+                "contusion": "Контузия", "hematomas": "Гематомы",
+                "lightBleeding": "Лёгкое кровотечение", "heavyBleeding": "Сильное кровотечение",
+                "bulletWounds": "Пулевые ранения", "viscera": "Внутренности",
+                "sepsis": "Сепсис", "zombieVirus": "Вирус зомби", "influenza": "Грипп",
+                "poison": "Отравление", "biohazard": "Биоугроза", "rabies": "Бешенство",
+                "overdose": "Передозировка", "immunity": "Иммунитет",
+                "radiation": "Радиация", "temperature": "Температура",
+                "brokenLeg": "Сломанная нога", "jumpHeight": "Высота прыжка",
+                "meleeDamage": "Урон ближнего боя"
+            }
+            
+            for row, key in enumerate(DEFAULT_EFFECT_KEYS, start=1):
+                enabled_var = tk.BooleanVar(value=False)
+                min_entry = ttk.Entry(inner, width=10)
+                max_entry = ttk.Entry(inner, width=10)
+                
+                # Значения по умолчанию
+                if eff_type == "positiveEffects":
+                    min_entry.insert(0, "0.1")
+                    max_entry.insert(0, "1.0")
+                else:
+                    min_entry.insert(0, "-1.0")
+                    max_entry.insert(0, "-0.1")
+                
+                ttk.Checkbutton(inner, text=key, variable=enabled_var, width=18, anchor="w").grid(row=row, column=0, padx=5, pady=1, sticky="w")
+                ttk.Checkbutton(inner, variable=enabled_var).grid(row=row, column=1, padx=5, pady=1)
+                min_entry.grid(row=row, column=2, padx=5, pady=1)
+                max_entry.grid(row=row, column=3, padx=5, pady=1)
+                ttk.Label(inner, text=effect_desc.get(key, ""), width=35, foreground="gray").grid(row=row, column=4, padx=5, pady=1, sticky="w")
+                
+                rand_entries[eff_type][key] = {"enabled": enabled_var, "min": min_entry, "max": max_entry}
+        
+        # Опции
+        opt_frame = ttk.Frame(rand_frame)
+        opt_frame.pack(fill="x", padx=5, pady=10)
+        
+        skip_zero_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(opt_frame, text="⏭️ Пропускать нулевые значения (не перезаписывать существующие)", variable=skip_zero_var).pack(anchor="w", padx=10, pady=2)
+        
+        # Кнопки действий
+        action_frame = ttk.Frame(win)
+        action_frame.pack(fill="x", padx=10, pady=10)
+        
+        def apply_mass_action():
+            selected_indices = [i for i, var in art_checkboxes.items() if var.get()]
+            
+            if not selected_indices:
+                messagebox.showwarning("Внимание", "Выберите хотя бы один артефакт")
+                return
+            
+            mode = mode_var.get()
+            updated_count = 0
+            
+            try:
+                if mode == "fill_from_csv":
+                    # Заполнение из CSV описания
+                    csv_path = None
+                    possible_paths = [
+                        os.path.join(os.path.dirname(self.file_path) if self.file_path else ".", "Арты (Шаблон) .csv"),
+                        os.path.join(os.getcwd(), "Арты (Шаблон) .csv"),
+                    ]
+                    for p in possible_paths:
+                        if os.path.exists(p):
+                            csv_path = p
+                            break
+                    
+                    if not csv_path:
+                        csv_path = filedialog.askopenfilename(
+                            title="Выберите CSV файл с описаниями",
+                            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+                        )
+                    
+                    if not csv_path:
+                        return
+                    
+                    # Читаем CSV
+                    descriptions = {}
+                    with open(csv_path, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            key_col = next((c for c in reader.fieldnames if 'класснейм' in c.lower() or 'key' in c.lower()), None)
+                            desc_col = next((c for c in reader.fieldnames if 'описание' in c.lower() or 'desc' in c.lower()), None)
+                            
+                            if key_col and desc_col:
+                                descriptions[row.get(key_col, '').strip()] = row.get(desc_col, '')
+                    
+                    # Обрабатываем выбранные артефакты
+                    for idx in selected_indices:
+                        art = self.main_data["artifacts"][idx]
+                        class_name = art.get("className", "")
+                        
+                        if class_name not in descriptions:
+                            continue
+                        
+                        parsed = parse_description_to_effects(descriptions[class_name])
+                        
+                        # Применяем только к пустым полям
+                        for eff_type in ["positiveEffects", "negativeEffects"]:
+                            for key, value in parsed.get(eff_type, {}).items():
+                                current = art.get(eff_type, {}).get(key, 0.0)
+                                if current == 0.0 or current == 0:
+                                    if eff_type not in art:
+                                        art[eff_type] = make_template_dict(0.0)
+                                    art[eff_type][key] = value
+                                    updated_count += 1
+                
+                elif mode == "random_gen":
+                    # Генерация случайных значений
+                    ranges = {}
+                    for eff_type in ["positiveEffects", "negativeEffects"]:
+                        ranges[eff_type] = {}
+                        for key, widgets in rand_entries[eff_type].items():
+                            if widgets["enabled"].get():
+                                try:
+                                    min_val = float(widgets["min"].get())
+                                    max_val = float(widgets["max"].get())
+                                    if min_val > max_val:
+                                        raise ValueError("Мин больше макс")
+                                    ranges[eff_type][key] = (min_val, max_val)
+                                except ValueError:
+                                    messagebox.showerror("Ошибка", f"Неверный диапазон для {key}: {widgets['min'].get()} - {widgets['max'].get()}")
+                                    return
+                    
+                    if not any(ranges.values()):
+                        messagebox.showwarning("Внимание", "Выберите хотя бы один эффект для генерации")
+                        return
+                    
+                    # Применяем к артефактам
+                    for idx in selected_indices:
+                        art = self.main_data["artifacts"][idx]
+                        
+                        for eff_type in ["positiveEffects", "negativeEffects"]:
+                            if eff_type not in art:
+                                art[eff_type] = make_template_dict(0.0)
+                            
+                            for key, (min_v, max_v) in ranges.get(eff_type, {}).items():
+                                if skip_zero_var.get():
+                                    current = art.get(eff_type, {}).get(key, 0.0)
+                                    if current != 0.0 and current != 0:
+                                        continue
+                                
+                                # Генерируем случайное значение
+                                value = round(random.uniform(min_v, max_v), 2)
+                                art[eff_type][key] = value
+                                updated_count += 1
+                
+                # Обновляем combined effects
+                for idx in selected_indices:
+                    art = self.main_data["artifacts"][idx]
+                    combined = make_template_dict(0.0)
+                    for k in DEFAULT_EFFECT_KEYS:
+                        pos = art.get("positiveEffects", {}).get(k, 0.0)
+                        neg = art.get("negativeEffects", {}).get(k, 0.0)
+                        combined[k] = pos + neg
+                    art["effects"] = combined
+                
+                self.refresh_tree()
+                messagebox.showinfo("Успех", f"Обработано артефактов: {len(selected_indices)}\nИзменено полей: {updated_count}\n\nНе забудьте сохранить файл! 💾")
+                
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Произошла ошибка при обработке:\n{str(e)}")
+        
+        ttk.Button(action_frame, text="🚀 Применить ко всем выбранным", command=apply_mass_action, style="Accent.TButton").pack(side="right", padx=5)
+        ttk.Button(action_frame, text="❌ Отмена", command=win.destroy).pack(side="right", padx=5)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
