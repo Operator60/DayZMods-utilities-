@@ -5,6 +5,9 @@ import os
 import copy
 import random
 
+# Импортируем систему локализации
+from localization import _, localizer, LOCALE_RU
+
 # ──────────────────────────────────────────────────────────────
 # ШАБЛОНЫ И КОНСТАНТЫ
 # ──────────────────────────────────────────────────────────────
@@ -32,11 +35,46 @@ DEFAULT_ARTIFACT = {
     "negativeEffects": make_template_dict(0.0)
 }
 
+# Профессиональные описания эффектов из локализации
+EFFECT_DESCRIPTIONS = {
+    "health": _("effect_health"),
+    "blood": _("effect_blood"),
+    "shock": _("effect_shock"),
+    "water": _("effect_water"),
+    "energy": _("effect_energy"),
+    "stamina": _("effect_stamina"),
+    "sleeping": _("effect_sleeping"),
+    "mind": _("effect_mind"),
+    "pain": _("effect_pain"),
+    "contusion": _("effect_contusion"),
+    "hematomas": _("effect_hematomas"),
+    "lightBleeding": _("effect_lightBleeding"),
+    "heavyBleeding": _("effect_heavyBleeding"),
+    "bulletWounds": _("effect_bulletWounds"),
+    "viscera": _("effect_viscera"),
+    "sepsis": _("effect_sepsis"),
+    "zombieVirus": _("effect_zombieVirus"),
+    "influenza": _("effect_influenza"),
+    "poison": _("effect_poison"),
+    "biohazard": _("effect_biohazard"),
+    "rabies": _("effect_rabies"),
+    "overdose": _("effect_overdose"),
+    "immunity": _("effect_immunity"),
+    "radiation": _("effect_radiation"),
+    "temperature": _("effect_temperature"),
+    "brokenLeg": _("effect_brokenLeg"),
+    "jumpHeight": _("effect_jumpHeight"),
+    "meleeDamage": _("effect_meleeDamage"),
+}
+
 class ArtifactManagerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("DayZ Artifacts Manager v1.0")
+        self.root.title(_("app_title"))
         self.root.geometry("1100x750")
+        
+        # Настройка стиля для более современного вида
+        self.setup_styles()
         
         self.file_path = None
         self.main_data = {"ticktime": 1.0, "radiusticktime": 1.0, "artifacts": []}
@@ -44,35 +82,57 @@ class ArtifactManagerApp:
         
         self.setup_ui()
         self.status_var = tk.StringVar()
-        self.status_var.set("Готово. Выберите или создайте файл .json")
+        self.status_var.set(_("status_ready"))
         ttk.Label(root, textvariable=self.status_var, justify=tk.LEFT, anchor="w").pack(fill="x", padx=5, pady=(0, 5))
 
+    def setup_styles(self):
+        """Настройка профессионального стиля интерфейса"""
+        style = ttk.Style()
+        
+        # Устанавливаем современную тему если доступна
+        available_themes = style.theme_names()
+        if "vista" in available_themes:
+            style.theme_use("vista")
+        elif "clam" in available_themes:
+            style.theme_use("clam")
+        
+        # Настраиваем цвета и шрифты
+        style.configure("TButton", padding=8, font=("Segoe UI", 10))
+        style.configure("TLabel", font=("Segoe UI", 10))
+        style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"))
+        style.configure("Title.TLabel", font=("Segoe UI", 14, "bold"))
+        style.configure("TLabelframe", font=("Segoe UI", 11, "bold"), padding=10)
+        style.configure("TLabelframe.Label", font=("Segoe UI", 11, "bold"))
+        style.configure("Treeview", font=("Segoe UI", 10), rowheight=25)
+        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
+        style.configure("TNotebook.Tab", padding=[12, 8], font=("Segoe UI", 10))
+
     def setup_ui(self):
-        # Верхняя панель кнопок
+        # Верхняя панель кнопок с локализованными надписями
         btn_frame = ttk.Frame(self.root)
         btn_frame.pack(fill="x", padx=10, pady=10)
         
-        ttk.Button(btn_frame, text="📂 Загрузить ARTIFACTS.JSON", command=self.load_json).pack(side="left", padx=2)
-        ttk.Button(btn_frame, text="💾 Сохранить изменения", command=self.save_json).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_load_json"), command=self.load_json).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_save_json"), command=self.save_json).pack(side="left", padx=2)
         ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10)
-        ttk.Button(btn_frame, text="➕ Добавить", command=lambda: self.open_editor(None)).pack(side="left", padx=2)
-        ttk.Button(btn_frame, text="✏️ Редактировать", command=self.edit_selected).pack(side="left", padx=2)
-        ttk.Button(btn_frame, text="🗑️ Удалить", command=self.delete_selected).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_add"), command=lambda: self.open_editor(None)).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_edit"), command=self.edit_selected).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_delete"), command=self.delete_selected).pack(side="left", padx=2)
         ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10)
-        ttk.Button(btn_frame, text="🔄 Обновить список", command=self.refresh_tree).pack(side="left", padx=2)
-        ttk.Button(btn_frame, text="📄 Импорт из CSV (классы)", command=self.import_csv).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_refresh"), command=self.refresh_tree).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_import_csv"), command=self.import_csv).pack(side="left", padx=2)
         ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10)
-        ttk.Button(btn_frame, text="🎲 Массовая настройка", command=self.open_bulk_editor).pack(side="left", padx=2)
+        ttk.Button(btn_frame, text=_("btn_bulk_edit"), command=self.open_bulk_editor).pack(side="left", padx=2)
 
         # Поиск по класснейму
         search_frame = ttk.Frame(self.root)
         search_frame.pack(fill="x", padx=10, pady=5)
-        ttk.Label(search_frame, text="🔍 Поиск:").pack(side="left", padx=(0, 5))
+        ttk.Label(search_frame, text=_("search_label")).pack(side="left", padx=(0, 5))
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *args: self.filter_tree(self.search_var.get()))
         search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=40)
         search_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(search_frame, text="✕ Очистить", command=lambda: self.search_var.set("")).pack(side="left", padx=5)
+        ttk.Button(search_frame, text=_("search_clear"), command=lambda: self.search_var.set("")).pack(side="left", padx=5)
 
         # Список артефактов
         tree_frame = ttk.Frame(self.root)
@@ -82,7 +142,16 @@ class ArtifactManagerApp:
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
         
         for col in columns:
-            self.tree.heading(col, text={"idx":"#", "className":"Класснейм", "workH":"В руке", "workI":"В инв.", "area":"Зона м", "posE":"Позитив", "negE":"Негатив"}[col])
+            header_texts = {
+                "idx": _("tree_header_idx"),
+                "className": _("tree_header_classname"),
+                "workH": _("tree_header_work_hands"),
+                "workI": _("tree_header_work_inventory"),
+                "area": _("tree_header_area_radius"),
+                "posE": _("tree_header_positive_effects"),
+                "negE": _("tree_header_negative_effects")
+            }
+            self.tree.heading(col, text=header_texts[col])
             self.tree.column(col, width=100 if col == "className" else 70, minwidth=50)
             
         self.tree.bind("<Double-1>", lambda e: self.edit_selected())
@@ -126,14 +195,17 @@ class ArtifactManagerApp:
                 data = json.load(f)
             
             if not isinstance(data, dict) or "artifacts" not in data:
-                raise ValueError("Неверная структура файла. Отсутствует ключ 'artifacts'.")
+                raise ValueError(_("error_structure"))
                 
             self.file_path = path
             self.main_data = data
             self.refresh_tree()
-            self.status_var.set(f"Загружено: {os.path.basename(path)} | Артефактов: {len(self.main_data['artifacts'])}")
+            self.status_var.set(_("status_loaded").format(
+                filename=os.path.basename(path),
+                count=len(self.main_data['artifacts'])
+            ))
         except Exception as e:
-            messagebox.showerror("Ошибка загрузки", str(e))
+            messagebox.showerror(_("error_load_title"), str(e))
 
     def save_json(self):
         if not self.file_path:
@@ -150,10 +222,10 @@ class ArtifactManagerApp:
                     
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump(self.main_data, f, indent=4, ensure_ascii=False)
-            self.status_var.set(f"Сохранено: {os.path.basename(self.file_path)}")
-            messagebox.showinfo("Успех", "Файл успешно сохранён! Можно запускать мод.")
+            self.status_var.set(_("status_saved").format(filename=os.path.basename(self.file_path)))
+            messagebox.showinfo(_("success_save_title"), _("success_save_message"))
         except Exception as e:
-            messagebox.showerror("Ошибка сохранения", f"Не удалось сохранить:\n{str(e)}")
+            messagebox.showerror(_("error_save_title"), f"{_('error_save_title')}:\n{str(e)}")
 
     def _normalize_effect_keys(self, d):
         """Добавляет отсутствующие ключи, чтобы избежать ошибок DayZ"""
@@ -175,24 +247,26 @@ class ArtifactManagerApp:
             editor_data = copy.deepcopy(DEFAULT_ARTIFACT)
             self.current_index = len(self.main_data["artifacts"])
             self._edit_mode = "new"
+            title = _("editor_title_new")
         else:
             editor_data = copy.deepcopy(self.main_data["artifacts"][index])
             self.current_index = index
             self._edit_mode = "edit"
+            title = _("editor_title_edit").format(index=index+1)
             
         win = tk.Toplevel(self.root)
-        win.title(f"Редактор артефакта {'(Новый)' if index is None else '#'+str(index+1)}")
+        win.title(title)
         win.geometry("950x700")
         
-        # Основные поля
-        ttk.Label(win, text="Основные параметры:", font=("Arial", 11, "bold")).pack(anchor="w", padx=15, pady=(15,5))
+        # Основные поля с локализованными заголовками
+        ttk.Label(win, text=_("editor_main_params"), style="Header.TLabel").pack(anchor="w", padx=15, pady=(15,5))
         fields = [
-            ("className", "Класснейм (ключ)", False),
-            ("workInHands", "Работает в руке (1/0)", True),
-            ("workInInventory", "Работает в инвентаре (1/0)", True),
-            ("workInArea", "Работает в области (1/0)", True),
-            ("areaRadius", "Радиус аномалии (м)", False),
-            ("areaPowerMode", "Мощность зоны", False)
+            ("className", _("editor_field_classname"), False),
+            ("workInHands", _("editor_field_work_hands"), True),
+            ("workInInventory", _("editor_field_work_inventory"), True),
+            ("workInArea", _("editor_field_work_area"), True),
+            ("areaRadius", _("editor_field_area_radius"), False),
+            ("areaPowerMode", _("editor_field_area_power"), False)
         ]
         forms = {}
         for key, lbl, is_binary in fields:
@@ -209,12 +283,12 @@ class ArtifactManagerApp:
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
         eff_entries = {}
-        for eff_type, title, color in [
-            ("positiveEffects", "✅ Позитивные эффекты", "green"),
-            ("negativeEffects", "❌ Негативные эффекты", "red")
+        for eff_type, title_key in [
+            ("positiveEffects", "tab_positive_effects"),
+            ("negativeEffects", "tab_negative_effects")
         ]:
             frame = ttk.Frame(notebook)
-            notebook.add(frame, text=title)
+            notebook.add(frame, text=_(title_key))
             
             # Создаём canvas с прокруткой для таблицы эффектов
             canvas = tk.Canvas(frame, highlightthickness=0)
@@ -232,25 +306,11 @@ class ArtifactManagerApp:
             scrollbar_y.pack(side="right", fill="y")
             
             # Заголовки таблицы
-            ttk.Label(inner_frame, text="Эффект", font=("Arial", 10, "bold"), width=20, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-            ttk.Label(inner_frame, text="Значение", font=("Arial", 10, "bold"), width=15, anchor="center").grid(row=0, column=1, padx=5, pady=5)
-            ttk.Label(inner_frame, text="Описание", font=("Arial", 10, "bold"), width=40, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+            ttk.Label(inner_frame, text=_("table_header_effect"), font=("Segoe UI", 10, "bold"), width=20, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+            ttk.Label(inner_frame, text=_("table_header_value"), font=("Segoe UI", 10, "bold"), width=15, anchor="center").grid(row=0, column=1, padx=5, pady=5)
+            ttk.Label(inner_frame, text=_("table_header_description"), font=("Segoe UI", 10, "bold"), width=40, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
             
             effect_entries = {}
-            effect_descriptions = {
-                "health": "Здоровье", "blood": "Кровь", "shock": "Шок",
-                "water": "Вода", "energy": "Энергия", "stamina": "Выносливость",
-                "sleeping": "Сон", "mind": "Рассудок", "pain": "Боль",
-                "contusion": "Контузия", "hematomas": "Гематомы",
-                "lightBleeding": "Лёгкое кровотечение", "heavyBleeding": "Сильное кровотечение",
-                "bulletWounds": "Пулевые ранения", "viscera": "Внутренности",
-                "sepsis": "Сепсис", "zombieVirus": "Вирус зомби", "influenza": "Грипп",
-                "poison": "Отравление", "biohazard": "Биоугроза", "rabies": "Бешенство",
-                "overdose": "Передозировка", "immunity": "Иммунитет",
-                "radiation": "Радиация", "temperature": "Температура тела",
-                "brokenLeg": "Сломанная нога", "jumpHeight": "Высота прыжка",
-                "meleeDamage": "Урон ближнего боя"
-            }
             
             for row, effect_key in enumerate(DEFAULT_EFFECT_KEYS, start=1):
                 ttk.Label(inner_frame, text=effect_key, width=20, anchor="w").grid(row=row, column=0, padx=5, pady=2, sticky="w")
@@ -260,7 +320,7 @@ class ArtifactManagerApp:
                 entry.grid(row=row, column=1, padx=5, pady=2)
                 effect_entries[effect_key] = entry
                 
-                desc = effect_descriptions.get(effect_key, "")
+                desc = EFFECT_DESCRIPTIONS.get(effect_key, "")
                 ttk.Label(inner_frame, text=desc, width=40, anchor="w", foreground="gray").grid(row=row, column=2, padx=5, pady=2, sticky="w")
             
             eff_entries[eff_type] = effect_entries
@@ -271,10 +331,10 @@ class ArtifactManagerApp:
                 for key, wgt in forms.items():
                     val = wgt.get().strip()
                     if not val:
-                        raise ValueError(f"Поле '{key}' не может быть пустым")
+                        raise ValueError(_("error_field_empty").format(field=key))
                     if key.startswith("work"):
                         if val not in ("0", "1"):
-                            raise ValueError(f"Поле '{key}' должно быть 0 или 1")
+                            raise ValueError(_("error_field_binary").format(field=key))
                         new_data[key] = int(val)
                     elif key in ("areaRadius", "areaPowerMode"):
                         new_data[key] = float(val)
@@ -287,11 +347,11 @@ class ArtifactManagerApp:
                     for effect_key, entry_widget in eff_entries[eff_type].items():
                         val_str = entry_widget.get().strip()
                         if not val_str:
-                            raise ValueError(f"Поле эффекта '{effect_key}' в разделе '{eff_type}' не может быть пустым. Введите 0 если эффект не нужен.")
+                            raise ValueError(_("error_effect_empty").format(effect=effect_key, section=eff_type))
                         try:
                             val = float(val_str)
                         except ValueError:
-                            raise ValueError(f"Неверное числовое значение для эффекта '{effect_key}': {val_str}")
+                            raise ValueError(_("error_field_number").format(effect=effect_key, value=val_str))
                         effects_dict[effect_key] = val
                     new_data[eff_type] = effects_dict
                 
@@ -317,15 +377,15 @@ class ArtifactManagerApp:
                     
                 self.refresh_tree()
                 win.destroy()
-                self.status_var.set("Изменения применены в память. Нажмите 💾 Сохранить.")
+                self.status_var.set(_("status_changes_applied"))
                 
             except Exception as e:
-                messagebox.showerror("Ошибка валидации", f"Проверьте введённые данные:\n{str(e)}")
+                messagebox.showerror(_("error_validation_title"), f"{_('error_validation_title')}\n{str(e)}")
 
         btn_frame = ttk.Frame(win)
         btn_frame.pack(fill="x", padx=15, pady=15)
-        ttk.Button(btn_frame, text="✅ Применить", command=apply_changes).pack(side="right", padx=5)
-        ttk.Button(btn_frame, text="❌ Отмена", command=win.destroy).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text=_("btn_apply"), command=apply_changes).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text=_("btn_cancel"), command=win.destroy).pack(side="right", padx=5)
 
     def fill_template(self, text_widget, key):
         text_widget.delete("1.0", tk.END)
@@ -358,10 +418,11 @@ class ArtifactManagerApp:
         sel = self.tree.selection()
         if not sel: return
         idx = int(self.tree.item(sel[0])["values"][0])
-        if messagebox.askyesno("Подтверждение", f"Удалить '{self.main_data['artifacts'][idx].get('className')}'?"):
+        classname = self.main_data['artifacts'][idx].get('className', _('unknown_artifact'))
+        if messagebox.askyesno(_("warning_confirm_delete"), _("warning_delete_message").format(classname=classname)):
             self.main_data["artifacts"].pop(idx)
             self.refresh_tree()
-            self.status_var.set("Артефакт удалён. Не забудьте сохранить!")
+            self.status_var.set(_("status_artifact_deleted"))
 
     def import_csv(self):
         path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
@@ -370,14 +431,14 @@ class ArtifactManagerApp:
             with open(path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
             if len(lines) < 2:
-                raise ValueError("CSV пуст или не содержит заголовков")
+                raise ValueError(_("csv_error_no_header"))
                 
             imports = 0
             header = lines[0].split(",")
-            cls_idx = next((i for i, h in enumerate(header) if "класснейм" in h.lower()), -1)
+            cls_idx = next((i for i, h in enumerate(header) if "класснейм" in h.lower() or "classname" in h.lower()), -1)
             desc_idx = next((i for i, h in enumerate(header) if "опиш" in h.lower()), -1)
             
-            if cls_idx == -1: raise ValueError("Не найден столбец с класснеймом")
+            if cls_idx == -1: raise ValueError(_("csv_error_no_classname"))
             
             for line in lines[1:]:
                 parts = line.split(",")
@@ -402,27 +463,27 @@ class ArtifactManagerApp:
                 imports += 1
                 
             self.refresh_tree()
-            messagebox.showinfo("Импорт завершён", f"Добавлено новых артефактов: {imports}\nТеперь откройте ❌ Редактировать и заполните эффекты.")
+            messagebox.showinfo(_("success_import_title"), _("success_import_message").format(count=imports))
             
         except Exception as e:
-            messagebox.showerror("Ошибка импорта", str(e))
+            messagebox.showerror(_("error_import_title"), str(e))
 
     def open_bulk_editor(self):
         """Окно массовой настройки эффектов для выбранных артефактов"""
         if not self.main_data["artifacts"]:
-            messagebox.showinfo("Внимание", "Сначала загрузите файл с артефактами.")
+            messagebox.showinfo(_("warning_no_artifacts"), _("warning_no_artifacts"))
             return
             
         win = tk.Toplevel(self.root)
-        win.title("🎲 Массовая настройка эффектов")
+        win.title(_("bulk_title"))
         win.geometry("1000x750")
         
         # Инструкция
-        ttk.Label(win, text="Выберите артефакты, эффекты и диапазоны значений для случайной генерации", 
-                  font=("Arial", 11)).pack(pady=10)
+        ttk.Label(win, text=_("bulk_instruction"), 
+                  font=("Segoe UI", 11)).pack(pady=10)
         
         # === БЛОК 1: Выбор артефактов ===
-        art_frame = ttk.LabelFrame(win, text="1️⃣ Выберите артефакты", padding=10)
+        art_frame = ttk.LabelFrame(win, text=_("bulk_step_1"), padding=10)
         art_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
         # Список с чекбоксами для артефактов
@@ -440,20 +501,20 @@ class ArtifactManagerApp:
         art_checkboxes = {}
         for i, art in enumerate(self.main_data["artifacts"]):
             var = tk.BooleanVar()
-            cb = ttk.Checkbutton(art_inner, text=f"{art.get('className', 'Unknown')} (#{i+1})", variable=var)
+            cb = ttk.Checkbutton(art_inner, text=f"{art.get('className', _('unknown_artifact'))} (#{i+1})", variable=var)
             cb.grid(row=i//2, column=i%2, sticky="w", padx=5, pady=2)
             art_checkboxes[i] = var
         
         # Кнопки выбора всех/снятия всех
         art_btn_frame = ttk.Frame(art_frame)
         art_btn_frame.pack(fill="x", pady=(5,0))
-        ttk.Button(art_btn_frame, text="✅ Выбрать все", 
+        ttk.Button(art_btn_frame, text=_("bulk_select_all"), 
                    command=lambda: [v.set(True) for v in art_checkboxes.values()]).pack(side="left", padx=5)
-        ttk.Button(art_btn_frame, text="❌ Снять все", 
+        ttk.Button(art_btn_frame, text=_("bulk_deselect_all"), 
                    command=lambda: [v.set(False) for v in art_checkboxes.values()]).pack(side="left", padx=5)
         
         # === БЛОК 2: Выбор эффектов ===
-        eff_frame = ttk.LabelFrame(win, text="2️⃣ Выберите эффекты для настройки", padding=10)
+        eff_frame = ttk.LabelFrame(win, text=_("bulk_step_2"), padding=10)
         eff_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
         # Вкладки для позитивных/негативных
@@ -461,24 +522,10 @@ class ArtifactManagerApp:
         eff_notebook.pack(fill="both", expand=True)
         
         effect_checkboxes = {"positiveEffects": {}, "negativeEffects": {}}
-        effect_descriptions = {
-            "health": "Здоровье", "blood": "Кровь", "shock": "Шок",
-            "water": "Вода", "energy": "Энергия", "stamina": "Выносливость",
-            "sleeping": "Сон", "mind": "Рассудок", "pain": "Боль",
-            "contusion": "Контузия", "hematomas": "Гематомы",
-            "lightBleeding": "Лёгкое кровотечение", "heavyBleeding": "Сильное кровотечение",
-            "bulletWounds": "Пулевые ранения", "viscera": "Внутренности",
-            "sepsis": "Сепсис", "zombieVirus": "Вирус зомби", "influenza": "Грипп",
-            "poison": "Отравление", "biohazard": "Биоугроза", "rabies": "Бешенство",
-            "overdose": "Передозировка", "immunity": "Иммунитет",
-            "radiation": "Радиация", "temperature": "Температура тела",
-            "brokenLeg": "Сломанная нога", "jumpHeight": "Высота прыжка",
-            "meleeDamage": "Урон ближнего боя"
-        }
         
-        for eff_type, title in [("positiveEffects", "✅ Позитивные эффекты"), ("negativeEffects", "❌ Негативные эффекты")]:
+        for eff_type, title_key in [("positiveEffects", "tab_positive_effects"), ("negativeEffects", "tab_negative_effects")]:
             frame = ttk.Frame(eff_notebook)
-            eff_notebook.add(frame, text=title)
+            eff_notebook.add(frame, text=_(title_key))
             
             # Canvas с прокруткой
             canvas = tk.Canvas(frame, height=200)
@@ -495,7 +542,7 @@ class ArtifactManagerApp:
             # Чекбоксы эффектов в 2 колонки
             for row, effect_key in enumerate(DEFAULT_EFFECT_KEYS):
                 var = tk.BooleanVar()
-                desc = effect_descriptions.get(effect_key, "")
+                desc = EFFECT_DESCRIPTIONS.get(effect_key, effect_key)
                 cb = ttk.Checkbutton(inner, text=f"{effect_key} ({desc})", variable=var)
                 cb.grid(row=row//2, column=row%2, sticky="w", padx=5, pady=2)
                 effect_checkboxes[eff_type][effect_key] = var
@@ -503,26 +550,26 @@ class ArtifactManagerApp:
             # Кнопки выбрать все/снять все
             btn_f = ttk.Frame(frame)
             btn_f.pack(fill="x", pady=(5,0))
-            ttk.Button(btn_f, text="✅ Все", 
+            ttk.Button(btn_f, text=_("bulk_select_effects_all"), 
                        command=lambda t=eff_type: [v.set(True) for v in effect_checkboxes[t].values()]).pack(side="left", padx=5)
-            ttk.Button(btn_f, text="❌ Никакие", 
+            ttk.Button(btn_f, text=_("bulk_select_effects_none"), 
                        command=lambda t=eff_type: [v.set(False) for v in effect_checkboxes[t].values()]).pack(side="left", padx=5)
         
         # === БЛОК 3: Диапазоны значений ===
-        range_frame = ttk.LabelFrame(win, text="3️⃣ Диапазон значений (мин - макс)", padding=10)
+        range_frame = ttk.LabelFrame(win, text=_("bulk_step_3"), padding=10)
         range_frame.pack(fill="x", padx=10, pady=5)
         
         range_entries = {}
-        for eff_type in ["positiveEffects", "negativeEffects"]:
+        for eff_type, label_key in [("positiveEffects", "bulk_range_positive"), ("negativeEffects", "bulk_range_negative")]:
             frm = ttk.Frame(range_frame)
             frm.pack(fill="x", pady=2)
-            ttk.Label(frm, text=f"{eff_type.replace('Effects', ' эффекты')}: ", width=25, anchor="e").pack(side="left")
+            ttk.Label(frm, text=_(label_key), width=25, anchor="e").pack(side="left")
             
             min_entry = ttk.Entry(frm, width=10)
             min_entry.insert(0, "-10.0")
             min_entry.pack(side="left", padx=5)
             
-            ttk.Label(frm, text="до").pack(side="left", padx=5)
+            ttk.Label(frm, text=_("bulk_range_to")).pack(side="left", padx=5)
             
             max_entry = ttk.Entry(frm, width=10)
             max_entry.insert(0, "10.0")
@@ -531,15 +578,15 @@ class ArtifactManagerApp:
             range_entries[eff_type] = {"min": min_entry, "max": max_entry}
         
         # === БЛОК 4: Дополнительные опции ===
-        opt_frame = ttk.LabelFrame(win, text="🔧 Дополнительные опции", padding=10)
+        opt_frame = ttk.LabelFrame(win, text=_("bulk_step_4"), padding=10)
         opt_frame.pack(fill="x", padx=10, pady=5)
         
         skip_zero_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(opt_frame, text="Не устанавливать нулевые значения (пропускать, если выпало 0)", 
+        ttk.Checkbutton(opt_frame, text=_("bulk_opt_skip_zero"), 
                         variable=skip_zero_var).pack(anchor="w")
         
         overwrite_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(opt_frame, text="Перезаписать существующие эффекты (иначе только пустые)", 
+        ttk.Checkbutton(opt_frame, text=_("bulk_opt_overwrite"), 
                         variable=overwrite_var).pack(anchor="w")
         
         # === КНОПКИ ДЕЙСТВИЯ ===
@@ -550,7 +597,7 @@ class ArtifactManagerApp:
             # Сбор выбранных артефактов
             selected_indices = [i for i, var in art_checkboxes.items() if var.get()]
             if not selected_indices:
-                messagebox.showwarning("Внимание", "Выберите хотя бы один артефакт!")
+                messagebox.showwarning(_("warning_select_bulk_artifact"), _("warning_select_bulk_artifact"))
                 return
             
             # Сбор выбранных эффектов
@@ -561,7 +608,7 @@ class ArtifactManagerApp:
                         selected_effects[eff_type].append(eff_key)
             
             if not any(selected_effects.values()):
-                messagebox.showwarning("Внимание", "Выберите хотя бы один эффект!")
+                messagebox.showwarning(_("warning_select_bulk_effect"), _("warning_select_bulk_effect"))
                 return
             
             # Парсинг диапазонов
@@ -571,10 +618,10 @@ class ArtifactManagerApp:
                     min_val = float(range_entries[eff_type]["min"].get().strip())
                     max_val = float(range_entries[eff_type]["max"].get().strip())
                     if min_val > max_val:
-                        raise ValueError(f"Минимум не может быть больше максимума для {eff_type}")
+                        raise ValueError(_("error_min_max").format(section=eff_type))
                     ranges[eff_type] = (min_val, max_val)
             except ValueError as e:
-                messagebox.showerror("Ошибка", f"Неверный диапазон значений: {str(e)}")
+                messagebox.showerror(_("error_validation_title"), f"{_('error_invalid_range').format(error=str(e))}")
                 return
             
             # Применение изменений
@@ -612,20 +659,23 @@ class ArtifactManagerApp:
                 art["effects"] = combined_effects
             
             self.refresh_tree()
-            messagebox.showinfo("Готово", f"Изменено эффектов: {modified_count}\nАртефактов затронуто: {len(selected_indices)}\n\nНе забудьте сохранить файл! 💾")
+            messagebox.showinfo(_("success_bulk_title"), _("success_bulk_message").format(
+                modified=modified_count,
+                artifacts=len(selected_indices)
+            ))
             win.destroy()
         
-        ttk.Button(action_frame, text="🎲 Применить случайные значения", command=apply_bulk).pack(side="right", padx=5)
-        ttk.Button(action_frame, text="❌ Отмена", command=win.destroy).pack(side="right", padx=5)
+        ttk.Button(action_frame, text=_("bulk_btn_apply"), command=apply_bulk).pack(side="right", padx=5)
+        ttk.Button(action_frame, text=_("bulk_btn_cancel"), command=win.destroy).pack(side="right", padx=5)
 
 if __name__ == "__main__":
     root = tk.Tk()
-    # Пытаемся улучшить стиль (работает на Windows/macOS/Linux с ttkthemes или системой по умолчанию)
-    style = ttk.Style()
+    
+    # Настройка иконки (если есть)
     try:
-        style.theme_use("vista") # fallback safe theme
+        root.iconbitmap(default="")  # Можно добавить свою иконку
     except:
         pass
-        
+    
     app = ArtifactManagerApp(root)
     root.mainloop()
