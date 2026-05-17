@@ -71,10 +71,15 @@ class ArtifactManagerApp:
     def __init__(self, root):
         self.root = root
         self.root.title(_("app_title"))
-        self.root.geometry("1100x750")
+        self.root.geometry("1200x800")
+        self.root.minsize(1000, 700)
         
         # Настройка стиля для более современного вида
         self.setup_styles()
+        
+        # Конфигурация для масштабирования главного окна
+        self.root.grid_rowconfigure(2, weight=1)  # Treeview расширяется
+        self.root.grid_columnconfigure(0, weight=1)
         
         self.file_path = None
         self.main_data = {"ticktime": 1.0, "radiusticktime": 1.0, "artifacts": []}
@@ -134,7 +139,7 @@ class ArtifactManagerApp:
         search_entry.pack(side="left", fill="x", expand=True)
         ttk.Button(search_frame, text=_("search_clear"), command=lambda: self.search_var.set("")).pack(side="left", padx=5)
 
-        # Список артефактов
+        # Список артефактов - используем pack с expand для масштабирования
         tree_frame = ttk.Frame(self.root)
         tree_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
@@ -152,7 +157,11 @@ class ArtifactManagerApp:
                 "negE": _("tree_header_negative_effects")
             }
             self.tree.heading(col, text=header_texts[col])
-            self.tree.column(col, width=100 if col == "className" else 70, minwidth=50)
+            # Увеличиваем ширину колонки className и делаем её растягиваемой
+            if col == "className":
+                self.tree.column(col, width=300, minwidth=150)
+            else:
+                self.tree.column(col, width=80, minwidth=60)
             
         self.tree.bind("<Double-1>", lambda e: self.edit_selected())
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
@@ -256,7 +265,12 @@ class ArtifactManagerApp:
             
         win = tk.Toplevel(self.root)
         win.title(title)
-        win.geometry("950x700")
+        win.geometry("1000x750")
+        win.minsize(900, 650)
+        
+        # Конфигурация для масштабирования окна редактора
+        win.grid_rowconfigure(3, weight=1)  # Notebook расширяется
+        win.grid_columnconfigure(0, weight=1)
         
         # Основные поля с локализованными заголовками
         ttk.Label(win, text=_("editor_main_params"), style="Header.TLabel").pack(anchor="w", padx=15, pady=(15,5))
@@ -278,7 +292,7 @@ class ArtifactManagerApp:
             ent.pack(side="left", padx=5)
             forms[key] = ent
             
-        # Вкладки для эффектов
+        # Вкладки для эффектов - с expand=True для масштабирования
         notebook = ttk.Notebook(win)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
@@ -305,23 +319,24 @@ class ArtifactManagerApp:
             canvas.pack(side="left", fill="both", expand=True)
             scrollbar_y.pack(side="right", fill="y")
             
-            # Заголовки таблицы
-            ttk.Label(inner_frame, text=_("table_header_effect"), font=("Segoe UI", 10, "bold"), width=20, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+            # Заголовки таблицы - фиксированная ширина для колонок
+            ttk.Label(inner_frame, text=_("table_header_effect"), font=("Segoe UI", 10, "bold"), width=25, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
             ttk.Label(inner_frame, text=_("table_header_value"), font=("Segoe UI", 10, "bold"), width=15, anchor="center").grid(row=0, column=1, padx=5, pady=5)
-            ttk.Label(inner_frame, text=_("table_header_description"), font=("Segoe UI", 10, "bold"), width=40, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+            ttk.Label(inner_frame, text=_("table_header_description"), font=("Segoe UI", 10, "bold"), width=50, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
             
             effect_entries = {}
             
             for row, effect_key in enumerate(DEFAULT_EFFECT_KEYS, start=1):
-                ttk.Label(inner_frame, text=effect_key, width=20, anchor="w").grid(row=row, column=0, padx=5, pady=2, sticky="w")
+                ttk.Label(inner_frame, text=effect_key, width=25, anchor="w").grid(row=row, column=0, padx=5, pady=2, sticky="w")
                 entry = ttk.Entry(inner_frame, width=15)
                 val = editor_data.get(eff_type, {}).get(effect_key, 0.0)
                 entry.insert(0, str(val))
-                entry.grid(row=row, column=1, padx=5, pady=2)
+                entry.grid(row=row, column=1, padx=5, pady=2, sticky="w")
                 effect_entries[effect_key] = entry
                 
                 desc = EFFECT_DESCRIPTIONS.get(effect_key, "")
-                ttk.Label(inner_frame, text=desc, width=40, anchor="w", foreground="gray").grid(row=row, column=2, padx=5, pady=2, sticky="w")
+                # Перенос длинных описаний
+                ttk.Label(inner_frame, text=desc, width=50, anchor="nw", foreground="gray", wraplength=400).grid(row=row, column=2, padx=5, pady=2, sticky="w")
             
             eff_entries[eff_type] = effect_entries
         
@@ -476,7 +491,12 @@ class ArtifactManagerApp:
             
         win = tk.Toplevel(self.root)
         win.title(_("bulk_title"))
-        win.geometry("1000x750")
+        win.geometry("1100x800")
+        win.minsize(950, 700)
+        
+        # Конфигурация для масштабирования
+        win.grid_rowconfigure(2, weight=1)  # Блок с эффектами расширяется
+        win.grid_columnconfigure(0, weight=1)
         
         # Инструкция
         ttk.Label(win, text=_("bulk_instruction"), 
@@ -484,10 +504,10 @@ class ArtifactManagerApp:
         
         # === БЛОК 1: Выбор артефактов ===
         art_frame = ttk.LabelFrame(win, text=_("bulk_step_1"), padding=10)
-        art_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        art_frame.pack(fill="x", padx=10, pady=5)
         
-        # Список с чекбоксами для артефактов
-        art_canvas = tk.Canvas(art_frame, height=150)
+        # Список с чекбоксами для артефактов - фиксированная высота
+        art_canvas = tk.Canvas(art_frame, height=120)
         art_scrollbar = ttk.Scrollbar(art_frame, orient="vertical", command=art_canvas.yview)
         art_inner = ttk.Frame(art_canvas)
         
@@ -527,8 +547,8 @@ class ArtifactManagerApp:
             frame = ttk.Frame(eff_notebook)
             eff_notebook.add(frame, text=_(title_key))
             
-            # Canvas с прокруткой
-            canvas = tk.Canvas(frame, height=200)
+            # Canvas с прокруткой - заполняет всё доступное пространство
+            canvas = tk.Canvas(frame)
             scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
             inner = ttk.Frame(canvas)
             
@@ -539,11 +559,11 @@ class ArtifactManagerApp:
             canvas.pack(side="left", fill="both", expand=True)
             scrollbar.pack(side="right", fill="y")
             
-            # Чекбоксы эффектов в 2 колонки
+            # Чекбоксы эффектов в 2 колонки с описаниями
             for row, effect_key in enumerate(DEFAULT_EFFECT_KEYS):
                 var = tk.BooleanVar()
                 desc = EFFECT_DESCRIPTIONS.get(effect_key, effect_key)
-                cb = ttk.Checkbutton(inner, text=f"{effect_key} ({desc})", variable=var)
+                cb = ttk.Checkbutton(inner, text=f"{effect_key} - {desc}", variable=var)
                 cb.grid(row=row//2, column=row%2, sticky="w", padx=5, pady=2)
                 effect_checkboxes[eff_type][effect_key] = var
             
